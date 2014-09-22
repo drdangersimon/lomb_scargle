@@ -13,3 +13,9 @@ def cpp_imp(x, y, f):
     out = np.empty_like(f, order='C')
     lomb_cpp(x, y, f, out)
     return out
+
+if __name__ == '__main__':
+    import benchmarks
+    import pylab as lab
+    print benchmarks.short_example.scipy_example(cpp_imp)[0]
+    lab.show()

@@ -34,7 +34,7 @@
 #include <Python.h>
 #include <boost/python.hpp>
 #include "boost/python/numeric.hpp"
-#include <stdio.h>
+#include <iostream>
 #include <vector>
 #include <math.h>
 namespace py = boost::python;
@@ -92,12 +92,26 @@ void lombscargle(py::object t, py::object x, py::object w, py::object P)
   int Nw = py::extract<int>(P.attr("__len__")());
   /* Local variables */
   int i, j;
-  double c, s, xc, xs, cc, ss, cs;
-  double theta;
-  double tau, c_tau, s_tau, c_tau2, s_tau2, cs_tau;
-  double term0, term1;
-  
-  for (i = 0; i <= Nw; i++)
+  float c, s, xc, xs, cc, ss, cs;
+  float theta;
+  float tau, c_tau, s_tau, c_tau2, s_tau2, cs_tau;
+  float term0, term1;
+  // make arrays for speed;
+  float *T, *W, *X;
+  T = (float*) malloc(Nt * sizeof(float));
+  X = (float*) malloc(Nt * sizeof(float));
+  W = (float*) malloc(Nw * sizeof(float));
+  // Put data in c arrays
+  for (i = 0; i < Nt; i++)
+  {
+    T[i] = py::extract<float>(t.attr("__getitem__")(i));
+    X[i] = py::extract<float>(x.attr("__getitem__")(i));
+  }
+  for( i = 0; i < Nw; i++)
+  {
+    W[i] = py::extract<float>(w.attr("__getitem__")(i));
+  }
+  for (i = 0; i < Nw; i++)
   {
     xc = 0.;
     xs = 0.;
@@ -105,23 +119,24 @@ void lombscargle(py::object t, py::object x, py::object w, py::object P)
     ss = 0.;
     cs = 0.;
 
-    for (j = 0; j <= Nt; j++)
+    for (j = 0; j < Nt; j++)
     {
-      theta = py::extract<double>(w.attr("__getitem__")(i)) * py::extract<double>(t.attr("__getitem__")(j)); 
+      theta = W[i] * T[j]; 
       c = cos(theta);
       s = sin(theta);
 
-      xc += py::extract<double>(x.attr("__getitem__")(j)) * c;
-      xs += py::extract<double>(x.attr("__getitem__")(j)) * s;
+      xc += X[j] * c;
+      xs += X[j] * s;
       cc += c * c;
       ss += s * s;
       cs += c * s;
 
     }
 
-    tau = atan(2 * cs / (cc - ss)) / (2 *  py::extract<double>(w.attr("__getitem__")(i)));
-    c_tau = cos(py::extract<double>(w.attr("__getitem__")(i)) * tau);
-    s_tau = sin(py::extract<double>(w.attr("__getitem__")(i)) * tau);
+    tau = atan(2 * cs / (cc - ss)) / (2 *  W[i]);
+    theta = W[i] * tau;
+    c_tau = cos(theta);
+    s_tau = sin(theta);
     c_tau2 = c_tau * c_tau;
     s_tau2 = s_tau * s_tau;
     cs_tau = 2 * c_tau * s_tau;
