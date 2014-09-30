@@ -2,7 +2,7 @@
 from time import time
 import numpy as np
 import pylab as lab
-
+import ipdb
 
 def scipy_example(periodogram_fn, show=False):
     '''Uses periodgoram_fn to calculate periodogram and times it'''
@@ -45,7 +45,6 @@ def scipy_example(periodogram_fn, show=False):
     # Then plot the normalized periodogram:
 
     plt2 = fig.add_subplot(2, 1, 2)
-
     plt2.plot(f, np.sqrt(4*(pgram/normval)))
     if show:
         lab.show()
