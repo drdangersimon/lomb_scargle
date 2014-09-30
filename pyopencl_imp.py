@@ -2,26 +2,33 @@ import pyopencl as cl
 import numpy as np
 
 '''OpenCl version'''
-lomb_txt = '''__kernel void lombscargle(__global float2 *x,__global float2 *y,__global float2 *f,__global float2 *P, int Nt, int Nw)
+lomb_txt = '''
+  #pragma OPENCL EXTENSION cl_khr_fp64: enable
+  #define PYOPENCL_DEFINE_CDOUBLE
+  __kernel void lombscargle(__global const float *x,
+                                  __global const float *y,
+                                  __global const float *f,
+                                 __global float *P,
+                                 const int Nt)
 {
-  /* Local variables */
-  int i, j;
-  float2 c, s, xc, xs, cc, ss, cs;
-  float2 tau, c_tau, s_tau, c_tau2, s_tau2, cs_tau;
-  float2 term0, term1;
 
+  // Local variables
+  int i = get_global_id(0);
+  int j;
+  float c, s, xc, xs, cc, ss, cs;
+  float tau, c_tau, s_tau, c_tau2, s_tau2, cs_tau;
+  float term0, term1;
+  float local_f = f[i];
 
-  for(i = 0; i < Nw; i++)
-  {
-    xc = 0.;
-    xs = 0.;
-    cc = 0.;
-    ss = 0.;
-    cs = 0.;
-    for(j = 0; j < Nt; j++)
+  xc = 0.;
+  xs = 0.;
+  cc = 0.;
+  ss = 0.;
+  cs = 0.;
+  for(j = 0; j < Nt; j++)
     {
-      c = cos(f[i] * x[j]);
-      s = sin(f[i] * x[j]);
+      c = cos(local_f * x[j]);
+      s = sin(local_f * x[j]);
 
       xc += y[j] * c;
       xs += y[j] * s;
@@ -31,9 +38,9 @@ lomb_txt = '''__kernel void lombscargle(__global float2 *x,__global float2 *y,__
 
      }
 
-    tau = atan(2 * cs / (cc - ss)) / (2 * f[i]);
-    c_tau = cos(f[i] * tau);
-    s_tau = sin(f[i] * tau);
+    tau = atan(2 * cs / (cc - ss)) / (2 * local_f);
+    c_tau = cos(local_f  * tau);
+    s_tau = sin(local_f  * tau);
     c_tau2 = c_tau * c_tau;
     s_tau2 = s_tau * s_tau;
     cs_tau = 2 * c_tau * s_tau;
@@ -41,7 +48,6 @@ lomb_txt = '''__kernel void lombscargle(__global float2 *x,__global float2 *y,__
     term0 = c_tau * xc + s_tau * xs;
     term1 = c_tau * xs - s_tau * xc;
     P[i] = 0.5 * (((term0 * term0) / (c_tau2 * cc + cs_tau * cs + s_tau2 * ss)) + ((term1 * term1) / (c_tau2 * ss - cs_tau * cs + s_tau2 * cc)));
-   }
   }'''
 
 def lombscarge_opencl(x, y, f):
@@ -52,13 +58,11 @@ def lombscarge_opencl(x, y, f):
     # make max arrays
     Nx, Nf = np.int32(x.shape[0]), np.int32(f.shape[0])
     # send data to card
-    x_g = cl.Buffer(ctx, mf.READ_ONLY, x.nbytes)
-    y_g = cl.Buffer(ctx, mf.READ_ONLY, y.nbytes)
-    f_g = cl.Buffer(ctx, mf.READ_ONLY, f.nbytes)
-    #Nx_g = cl.Buffer(ctx, mf.READ_ONLY, Nx.nbytes)
-    #Nf_g = cl.Buffer(ctx, mf.READ_ONLY, Nf.nbytes)
+    x_g = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=x)
+    y_g = cl.Buffer(ctx, mf.READ_ONLY| mf.COPY_HOST_PTR, hostbuf=y)
+    f_g = cl.Buffer(ctx, mf.READ_ONLY| mf.COPY_HOST_PTR, hostbuf=f)
     # make output
-    pgram = np.empty(f.shape)
+    pgram = np.empty(f.shape, dtype=np.float16)
     pgram_g = cl.Buffer(ctx, mf.WRITE_ONLY, pgram.nbytes)
     prg = cl.Program(ctx, lomb_txt)
 
@@ -69,11 +73,13 @@ def lombscarge_opencl(x, y, f):
         print(prg.get_build_info(ctx.devices[0], cl.program_build_info.LOG))
         raise
 
-    prg.lombscargle(queue, pgram.shape, None, *(x_g, y_g, f_g, pgram_g, Nx, Nf))
+    prg.lombscargle(queue, pgram.shape, None, x_g, y_g, f_g, pgram_g, Nx)
     cl.enqueue_read_buffer(queue, pgram_g, pgram)
 
     return pgram
 if __name__ == '__main__':
     from benchmarks import short_example
     from pyopencl_imp import *
-    short_example.scipy_example(lombscarge_opencl)
+    import pylab as lab
+    print short_example.scipy_example(lombscarge_opencl)[0]
+    lab.show()
